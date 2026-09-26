@@ -226,3 +226,33 @@ print("Mean error:", errors.mean())
 print("Mean absolute error:", np.abs(errors).mean())
 print("Minimum error:", errors.min())
 print("Maximum error:", errors.max())
+
+plt.hist(errors, bins=50)
+
+plt.xlabel("Prediction Error (Actual - Predicted)")
+plt.ylabel("Number of Predictions")
+plt.title("Temporal Random Forest - Prediction Errors")
+
+plt.tight_layout()
+plt.show()
+
+plt.scatter(
+    y_val_t,
+    y_pred_t,
+    alpha=0.3
+)
+
+min_rul = min(y_val_t.min(), y_pred_t.min())
+max_rul = max(y_val_t.max(), y_pred_t.max())
+
+plt.plot(
+    [min_rul, max_rul],
+    [min_rul, max_rul]
+)
+
+plt.xlabel("Actual RUL")
+plt.ylabel("Predicted RUL")
+plt.title("Actual vs Predicted RUL")
+
+plt.tight_layout()
+plt.show()
