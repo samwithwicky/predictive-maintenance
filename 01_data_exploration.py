@@ -104,8 +104,6 @@ plt.show()
 units = df["unit"].unique()
 
 train_units, val_units = train_test_split(units, test_size = 0.2, random_state = 42)
-
-
 train_df = df[df["unit"].isin(train_units)].copy()
 val_df = df[df["unit"].isin(val_units)].copy()
 """
@@ -114,6 +112,7 @@ print("Valdation engines:", len(val_units))
 
 print("Training rows", len(train_df))
 print("Valdation rows", len(val_df))
+"""
 """
 
 x_train = train_df[sensor_cols]
@@ -126,10 +125,10 @@ model = RandomForestRegressor(n_estimators = 100, random_state = 42, n_jobs= -1)
 model.fit(x_train,y_train)
 
 y_pred = model.predict(x_val)
-"""
+
 print("Actual: ",y_val.iloc[:10].values)
 print("Predicted:", y_pred[:10])
-"""
+
 mae = mean_absolute_error(y_val, y_pred)
 
 rmse = np.sqrt(mean_squared_error(y_val,y_pred))
@@ -137,7 +136,7 @@ rmse = np.sqrt(mean_squared_error(y_val,y_pred))
 print("MAE:",mae)
 print("RMSE:",rmse)
 
-"""
+
 features_with_op = sensor_cols + [
     "op_setting_1",
     "op_setting_2",
@@ -165,4 +164,65 @@ rmse_op = np.sqrt(mean_squared_error(y_val, y_pred_op))
 print("With operational settings")
 print("MAE:", mae_op)
 print("RMSE:", rmse_op)
+
 """
+
+
+lag_features = sensor_cols
+
+for lag in[1,2,3]:
+    for col in lag_features:
+        train_df[f"{col}_lag{lag}"] = (train_df.groupby("unit")[col].shift(lag))
+        val_df[f"{col}_lag{lag}"] = (val_df.groupby("unit")[col].shift(lag))
+
+
+#print(train_df.shape)
+#print(val_df.shape)
+
+train_df = train_df.dropna().copy()
+val_df = val_df.dropna().copy()
+
+#print(train_df.shape)
+#print(val_df.shape)
+
+lag_cols = []
+
+for lag in [1,2,3]:
+    for col in sensor_cols:
+        lag_cols.append(f"{col}_lag{lag}")
+
+temporal_features = sensor_cols + lag_cols
+#print("Number of temporal features:", len(temporal_features))
+
+x_train_t = train_df[temporal_features]
+y_train_t = train_df["RUL"]
+
+x_val_t = val_df[temporal_features]
+y_val_t = val_df["RUL"]
+
+#print(x_train_t.shape)
+#print(x_val_t.shape)
+
+model_temporal = RandomForestRegressor(n_estimators= 100,random_state = 42, n_jobs = -1)
+model_temporal.fit(x_train_t,y_train_t)
+
+y_pred_t = model_temporal.predict(x_val_t)
+
+mae_temporal = mean_absolute_error(
+    y_val_t,
+    y_pred_t
+)
+
+rmse_temporal = np.sqrt(
+    mean_squared_error(
+        y_val_t,
+        y_pred_t
+    )
+)
+
+errors = y_val_t - y_pred_t
+
+print("Mean error:", errors.mean())
+print("Mean absolute error:", np.abs(errors).mean())
+print("Minimum error:", errors.min())
+print("Maximum error:", errors.max())
