@@ -216,80 +216,304 @@ print(val_df.shape)
 train_df = train_df.dropna().copy()
 val_df = val_df.dropna().copy()
 
-feature_sets = {
-    "Raw sensors": sensor_cols,
+# feature_sets = {
+#     "Raw sensors": sensor_cols,
 
-    "Raw + Lag": (
-        sensor_cols
-        + lag_features
-    ),
+#     "Raw + Lag": (
+#         sensor_cols
+#         + lag_features
+#     ),
 
-    "Raw + Lag + Rolling Mean": (
-        sensor_cols
-        + lag_features
-        + rolling_features
-    ),
+#     "Raw + Lag + Rolling Mean": (
+#         sensor_cols
+#         + lag_features
+#         + rolling_features
+#     ),
 
-    "Raw + Lag + Rolling Mean + Degradation": (
-        sensor_cols
-        + lag_features
-        + rolling_features
-        + degradation_features
+#     "Raw + Lag + Rolling Mean + Degradation": (
+#         sensor_cols
+#         + lag_features
+#         + rolling_features
+#         + degradation_features
+#     )
+# }
+
+# ablation_results = []
+
+# for name, features in feature_sets.items():
+
+#     print(f"\nRunning: {name}")
+#     print(f"Number of features: {len(features)}")
+
+#     x_train = train_df[features]
+#     y_train = train_df["RUL"]
+
+#     x_val = val_df[features]
+#     y_val = val_df["RUL"]
+
+#     model = RandomForestRegressor(
+#         n_estimators=100,
+#         random_state=42,
+#         n_jobs=-1
+#     )
+
+#     model.fit(x_train, y_train)
+
+#     predictions = model.predict(x_val)
+
+#     mae = mean_absolute_error(
+#         y_val,
+#         predictions
+#     )
+
+#     rmse = np.sqrt(
+#         mean_squared_error(
+#             y_val,
+#             predictions
+#         )
+#     )
+
+#     ablation_results.append({
+#         "Feature set": name,
+#         "Features": len(features),
+#         "MAE": mae,
+#         "RMSE": rmse
+#     })
+
+
+# ablation_results = pd.DataFrame(ablation_results)
+
+# print("\nFeature Ablation Results:")
+# print(ablation_results)
+
+# print(train_df.shape)
+# print(val_df.shape)
+
+
+
+full_features = (
+    sensor_cols
+    + lag_features
+    + rolling_features
+    + degradation_features
+)
+
+x_train_full = train_df[full_features]
+y_train_full = train_df["RUL"]
+
+x_val_full = val_df[full_features]
+y_val_full = val_df["RUL"]
+
+model_full = RandomForestRegressor(
+    n_estimators=100,
+    random_state=42,
+    n_jobs=-1
+)
+
+model_full.fit(x_train_full, y_train_full)
+
+predictions_full = model_full.predict(x_val_full)
+
+# mae_full = mean_absolute_error(
+#     y_val_full,
+#     predictions_full
+# )
+
+# rmse_full = np.sqrt(
+#     mean_squared_error(
+#         y_val_full,
+#         predictions_full
+#     )
+# )
+
+# print("\nFull Model")
+# print("MAE:", mae_full)
+# print("RMSE:", rmse_full)
+
+
+# Feature importance
+feature_importance = pd.DataFrame({
+    "feature": full_features,
+    "importance": model_full.feature_importances_
+})
+
+feature_importance = feature_importance.sort_values(
+    "importance",
+    ascending=False
+)
+
+# ---------------------------------------------------------
+# Top feature model
+# ---------------------------------------------------------
+
+top_n = 60
+
+top_features = feature_importance.head(top_n)["feature"].tolist()
+
+print(f"\nTraining model with top {top_n} features")
+print("Features:", top_features)
+
+x_train_top = train_df[top_features]
+y_train_top = train_df["RUL"]
+
+x_val_top = val_df[top_features]
+y_val_top = val_df["RUL"]
+
+model_top = RandomForestRegressor(
+    n_estimators=100,
+    random_state=42,
+    n_jobs=-1
+)
+
+model_top.fit(x_train_top, y_train_top)
+
+y_pred_top = model_top.predict(x_val_top)
+
+mae_top = mean_absolute_error(
+    y_val_top,
+    y_pred_top
+)
+
+rmse_top = np.sqrt(
+    mean_squared_error(
+        y_val_top,
+        y_pred_top
     )
-}
+)
 
-ablation_results = []
-
-for name, features in feature_sets.items():
-
-    print(f"\nRunning: {name}")
-    print(f"Number of features: {len(features)}")
-
-    x_train = train_df[features]
-    y_train = train_df["RUL"]
-
-    x_val = val_df[features]
-    y_val = val_df["RUL"]
-
-    model = RandomForestRegressor(
-        n_estimators=100,
-        random_state=42,
-        n_jobs=-1
-    )
-
-    model.fit(x_train, y_train)
-
-    predictions = model.predict(x_val)
-
-    mae = mean_absolute_error(
-        y_val,
-        predictions
-    )
-
-    rmse = np.sqrt(
-        mean_squared_error(
-            y_val,
-            predictions
-        )
-    )
-
-    ablation_results.append({
-        "Feature set": name,
-        "Features": len(features),
-        "MAE": mae,
-        "RMSE": rmse
-    })
+print("\nTop 60 Feature Model")
+print("MAE:", mae_top)
+print("RMSE:", rmse_top)
 
 
-ablation_results = pd.DataFrame(ablation_results)
+# ---------------------------------------------------------
+# Error analysis - Top 60 model
+# ---------------------------------------------------------
 
-print("\nFeature Ablation Results:")
-print(ablation_results)
+results_top = pd.DataFrame({
+    "unit": val_df["unit"].values,
+    "cycle": val_df["cycle"].values,
+    "actual": y_val_top.values,
+    "predicted": y_pred_top
+})
 
-print(train_df.shape)
-print(val_df.shape)
+results_top["error"] = (
+    results_top["actual"] - results_top["predicted"]
+)
+
+results_top["abs_error"] = (
+    results_top["error"].abs()
+)
+
+results_top["RUL_region"] = pd.cut(
+    results_top["actual"],
+    bins=[-1, 20, 50, 100, np.inf],
+    labels=["0-20", "21-50", "51-100", "100+"]
+)
+
+print("\nError by RUL region - Top 60:")
+print(
+    results_top.groupby(
+        "RUL_region",
+        observed=False
+    )["abs_error"].agg(["mean", "count"])
+)
+
+print("\nPrediction bias by RUL region - Top 60:")
+print(
+    results_top.groupby(
+        "RUL_region",
+        observed=False
+    )["error"].agg(["mean", "min", "max", "count"])
+)
+
+print("\nWorst 20 predictions - Top 60:")
+print(
+    results_top.sort_values(
+        "abs_error",
+        ascending=False
+    ).head(20)
+)
+
+# print("\nTop 30 Features:")
+# print(feature_importance.head(30))
 
 
+# # ---------------------------------------------------------
+# # Plot top 20 features
+# # ---------------------------------------------------------
+
+# top_features = feature_importance.head(20)
+
+# plt.figure(figsize=(10, 8))
+
+# plt.barh(
+#     top_features["feature"][::-1],
+#     top_features["importance"][::-1]
+# )
+
+# plt.xlabel("Importance")
+# plt.ylabel("Feature")
+# plt.title("Top 20 Random Forest Features")
+
+# plt.tight_layout()
+# plt.show()
+
+# ---------------------------------------------------------
+# Feature selection experiment
+# ---------------------------------------------------------
+
+# feature_counts = [20, 40, 60, 100, 210]
+
+# selection_results = []
+
+# for n_features in feature_counts:
+
+#     selected_features = feature_importance.head(n_features)["feature"].tolist()
+
+#     print(f"\nRunning Top {n_features} Features")
+
+#     x_train_selected = train_df[selected_features]
+#     x_val_selected = val_df[selected_features]
+
+#     model_selected = RandomForestRegressor(
+#         n_estimators=100,
+#         random_state=42,
+#         n_jobs=-1
+#     )
+
+#     model_selected.fit(
+#         x_train_selected,
+#         y_train_full
+#     )
+
+#     predictions_selected = model_selected.predict(
+#         x_val_selected
+#     )
+
+#     mae = mean_absolute_error(
+#         y_val_full,
+#         predictions_selected
+#     )
+
+#     rmse = np.sqrt(
+#         mean_squared_error(
+#             y_val_full,
+#             predictions_selected
+#         )
+#     )
+
+#     selection_results.append({
+#         "Features": n_features,
+#         "MAE": mae,
+#         "RMSE": rmse
+#     })
+
+
+# selection_results = pd.DataFrame(selection_results)
+
+# print("\nFeature Selection Results:")
+# print(selection_results)
 
 
 # temporal_features = sensor_cols + lag_features + rolling_features + degradation_features
@@ -331,15 +555,14 @@ print(val_df.shape)
 
 # feature_importance = feature_importance.sort_values("importance",ascending = False)
 
-# # top_features = feature_importance.head(20)
-# # plt.figure()
+# top_features = feature_importance.head(20)
+# plt.figure()
+# plt.barh(top_features["feature"][::-1],top_features["importance"][::-1])
 
-# # plt.barh(top_features["feature"][::-1],top_features["importance"][::-1])
-
-# # plt.xlabel("feature")
-# # plt.ylabel("importance")
-# # plt.title("top 20 random forest features")
-# # plt.show()
+# plt.xlabel("feature")
+# plt.ylabel("importance")
+# plt.title("top 20 random forest features")
+# plt.show()
 
 # results = pd.DataFrame({
 #     "unit": val_df["unit"].values,
