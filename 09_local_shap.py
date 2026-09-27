@@ -1,12 +1,13 @@
 import pandas as pd
 import numpy as np
 import joblib
+import shap
 
-
-# Load trained model
 model = joblib.load(
     "models/rul_random_forest_capped.pkl"
 )
+
+print("Model loaded.")
 
 # Load the feature list used during training
 top_features = joblib.load(
@@ -108,67 +109,84 @@ test_df = test_df.dropna().copy()
 # print("Feature engineering complete.")
 # print("Rows after feature engineering:", len(test_df))
 
-# Select the exact 60 features used during training
 X_inference = test_df[top_features]
 
-# print("Inference data prepared.")
-# print("Samples:", len(X_inference))
-# print("Features:", X_inference.shape[1])
 
-# Generate RUL predictions
-predictions = model.predict(X_inference)
+# ---------------------------------------------------------
+# Select the latest observation for Engine 34
+# ---------------------------------------------------------
 
-# print("Predictions generated.")
-# print("Number of predictions:", len(predictions))
+engine_id = int(input("Enter engine number: "))
 
-# Attach predictions to the corresponding rows
-test_df["predicted_RUL"] = predictions
-
-# Keep only the latest cycle for each engine
-latest_predictions = (
-    test_df
-    .sort_values(["unit", "cycle"])
-    .groupby("unit")
-    .tail(1)
+engine_data = (
+    test_df[test_df["unit"] == engine_id]
+    .sort_values("cycle")
 )
 
-RUL_NORMAL = 50
-RUL_MONITOR = 20
+if engine_data.empty:
+    print(f"Engine {engine_id} not found.")
+    exit()
 
-def classify_risk(rul):
-
-    if rul <= 0:
-        return "Critical"
-
-    elif rul <= RUL_MONITOR:
-        return "Maintenance Attention"
-
-    elif rul <= RUL_NORMAL:
-        return "Monitor"
-
-    else:
-        return "Normal"
+latest_row = engine_data.tail(1)
+X_engine = latest_row[top_features]
 
 
-latest_predictions["risk_level"] = (
-    latest_predictions["predicted_RUL"]
-    .apply(classify_risk)
+
+
+# ---------------------------------------------------------
+# SHAP explanation
+# ---------------------------------------------------------
+
+explainer = shap.TreeExplainer(model)
+
+shap_values = explainer.shap_values(X_engine)
+
+shap_values = np.asarray(shap_values).flatten()
+
+
+# ---------------------------------------------------------
+# Create explanation table
+# ---------------------------------------------------------
+
+explanation = pd.DataFrame({
+    "feature": top_features,
+    "feature_value": X_engine.iloc[0].values,
+    "shap_value": shap_values
+})
+
+explanation["abs_shap"] = (
+    explanation["shap_value"].abs()
 )
 
-print("\nFleet Maintenance Status")
-print("-------------------------")
+explanation = explanation.sort_values(
+    "abs_shap",
+    ascending=False
+)
 
+# Features pushing RUL downward
+negative_factors = (
+    explanation[explanation["shap_value"] < 0]
+    .sort_values("shap_value")
+)
+
+# Features pushing RUL upward
+positive_factors = (
+    explanation[explanation["shap_value"] > 0]
+    .sort_values("shap_value", ascending=False)
+)
+
+print("\nFactors pushing RUL DOWN")
+print("------------------------")
 print(
-    latest_predictions[
-        ["unit", "cycle", "predicted_RUL", "risk_level"]
-    ].sort_values("predicted_RUL")
-    .to_string(index=False)
+    negative_factors[
+        ["feature", "feature_value", "shap_value"]
+    ].head(10).to_string(index=False)
 )
 
-print("\nRisk Distribution")
-print("-----------------")
-
+print("\nFactors pushing RUL UP")
+print("----------------------")
 print(
-    latest_predictions["risk_level"]
-    .value_counts()
+    positive_factors[
+        ["feature", "feature_value", "shap_value"]
+    ].head(10).to_string(index=False)
 )
