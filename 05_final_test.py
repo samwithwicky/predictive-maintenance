@@ -43,6 +43,8 @@ test_df["RUL"] = (
     + test_df["unit"].map(rul_df["RUL"])
 )
 
+test_df["RUL"] = test_df["RUL"].clip(upper=125)
+
 
 # print("Test samples:", len(test_df))
 # print("Test engines:", test_df["unit"].nunique())
@@ -118,7 +120,7 @@ test_df = test_df.dropna().copy()
 
 
 model = joblib.load(
-    "models/rul_random_forest_tuned.pkl"
+    "models/rul_random_forest_capped.pkl"
 )
 
 top_features = joblib.load(

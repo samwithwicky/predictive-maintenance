@@ -163,10 +163,10 @@ top_features = joblib.load(
 
 # Prepare training and validation data
 X_train = train_df[top_features]
-y_train = train_df["RUL"]
+y_train = train_df["RUL"].clip(upper=125)
 
 X_val = val_df[top_features]
-y_val = val_df["RUL"]
+y_val = val_df["RUL"].clip(upper=125)
 
 # Hyperparameter search
 
@@ -237,8 +237,8 @@ print("MAE:", tuned_mae)
 print("RMSE:", tuned_rmse)
 
 joblib.dump(
-    tuned_model,
-    "models/rul_random_forest_tuned.pkl"
+    search.best_estimator_,
+    "models/rul_random_forest_capped.pkl"
 )
 
 print("Tuned model saved.")
