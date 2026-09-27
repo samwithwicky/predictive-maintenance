@@ -166,27 +166,48 @@ print("MAE:", mae_op)
 print("RMSE:", rmse_op)
 
 """
-
-
-lag_features = sensor_cols
+lag_features = []
 
 for lag in[1,2,3]:
-    for col in lag_features:
+    for col in sensor_cols:
+
+        lag_cols = f"{col}_lag{lag}"
+
         train_df[f"{col}_lag{lag}"] = (train_df.groupby("unit")[col].shift(lag))
         val_df[f"{col}_lag{lag}"] = (val_df.groupby("unit")[col].shift(lag))
 
+        lag_features.append(lag_cols)
+
+
 rolling_features = []
+degradation_features = []
 
 for window in [5,10]:
     for col in sensor_cols:
 
-        feature_name = f"{col}_mean_{window}"
+        mean_name = f"{col}_mean_{window}"
 
-        train_df[feature_name] = train_df.groupby("unit")[col].transform(lambda x: x.rolling(window).mean())
-        val_df[feature_name] = val_df.groupby("unit")[col].transform(lambda x: x.rolling(window).mean())
+        train_df[mean_name] = train_df.groupby("unit")[col].transform(lambda x: x.rolling(window).mean())
+        val_df[mean_name] = val_df.groupby("unit")[col].transform(lambda x: x.rolling(window).mean())
 
-        rolling_features.append(feature_name)
+        rolling_features.append(mean_name)
 
+        std_name = f"{col}_std_{window}"
+        train_df[std_name] = train_df.groupby("unit")[col].transform(lambda x:x.rolling(window).std())
+        val_df[std_name] = val_df.groupby("unit")[col].transform(lambda x: x.rolling(window).std())
+
+        degradation_features.append(std_name)
+
+for window in [10,20]:
+    for col in sensor_cols:
+
+        slope_name = f"{col}_slope_{window}"
+        def calculate_slope(x):
+            return x.rolling(window).apply(lambda y: np.polyfit(np.arange(len(y)),y,1)[0],raw = True)
+        train_df[slope_name] = train_df.groupby("unit")[col].transform(calculate_slope)
+        val_df[slope_name] = val_df.groupby("unit")[col].transform(calculate_slope)
+
+        degradation_features.append(slope_name)
 
 
 print(train_df.shape)
@@ -198,14 +219,10 @@ val_df = val_df.dropna().copy()
 print(train_df.shape)
 print(val_df.shape)
 
-lag_cols = []
-
-for lag in [1,2,3]:
-    for col in sensor_cols:
-        lag_cols.append(f"{col}_lag{lag}")
 
 
-temporal_features = sensor_cols + lag_cols + rolling_features
+
+temporal_features = sensor_cols + lag_features + rolling_features + degradation_features
 #print("Number of temporal features:", len(temporal_features))
 
 x_train_t = train_df[temporal_features]
@@ -238,8 +255,22 @@ print("Temporal + Rolling Features")
 print("MAE:", mae_temporal)
 print("RMSE:", rmse_temporal)
 
-# E"""rror by RUL region
-"""
+feature_importance = pd.DataFrame({
+    "feature":temporal_features,"importance":model_temporal.feature_importances_
+})
+
+feature_importance = feature_importance.sort_values("importance",ascending = False)
+
+# top_features = feature_importance.head(20)
+# plt.figure()
+
+# plt.barh(top_features["feature"][::-1],top_features["importance"][::-1])
+
+# plt.xlabel("feature")
+# plt.ylabel("importance")
+# plt.title("top 20 random forest features")
+# plt.show()
+
 results = pd.DataFrame({
     "unit": val_df["unit"].values,
     "cycle": val_df["cycle"].values,
@@ -250,45 +281,28 @@ results = pd.DataFrame({
 results["error"] = results["actual"] - results["predicted"]
 results["abs_error"] = results["error"].abs()
 
-worst_predictions = results.sort_values(
-    "abs_error",
-    ascending=False
-).head(20)
+results["RUL_region"] = pd.cut(
+    results["actual"],
+    bins=[-1, 20, 50, 100, np.inf],
+    labels=["0-20", "21-50", "51-100", "100+"]
+)
+
+print("\nError by RUL region:")
+print(
+    results.groupby("RUL_region", observed=False)["abs_error"]
+    .agg(["mean", "count"])
+)
+
+print("\nPrediction bias by RUL region:")
+print(
+    results.groupby("RUL_region", observed=False)["error"]
+    .agg(["mean", "min", "max", "count"])
+)
 
 print("\nWorst 20 predictions:")
-print(worst_predictions)
-
-worst_units = [1,31,84]
-
-for unit in worst_units:
-    engine = df[df["unit"] == unit]
-
-    plt.figure()
-    plt.plot(
-        engine["cycle"],engine["T30"]
-    )
-    plt.xlabel("cycle")
-    plt.ylabel("T30")
-    plt.title(f"engine{unit} cycle v t30")
-    plt.show()
-"""
-
-feature_importance = pd.DataFrame({
-    "feature":temporal_features,"importance":model_temporal.feature_importances_
-})
-
-feature_importance = feature_importance.sort_values("importance",ascending = False)
-
-print("Top 20 features")
-print(df.head(20))
-
-top_features = feature_importance.head(20)
-plt.figure()
-
-plt.barh(top_features["feature"][::-1],top_features["importance"][::-1])
-
-plt.xlabel("feature")
-plt.ylabel("importance")
-plt.title("top 20 random forest features")
-plt.show()
-
+print(
+    results.sort_values(
+        "abs_error",
+        ascending=False
+    ).head(20)
+)
