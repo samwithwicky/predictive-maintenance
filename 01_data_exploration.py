@@ -216,93 +216,163 @@ print(val_df.shape)
 train_df = train_df.dropna().copy()
 val_df = val_df.dropna().copy()
 
+feature_sets = {
+    "Raw sensors": sensor_cols,
+
+    "Raw + Lag": (
+        sensor_cols
+        + lag_features
+    ),
+
+    "Raw + Lag + Rolling Mean": (
+        sensor_cols
+        + lag_features
+        + rolling_features
+    ),
+
+    "Raw + Lag + Rolling Mean + Degradation": (
+        sensor_cols
+        + lag_features
+        + rolling_features
+        + degradation_features
+    )
+}
+
+ablation_results = []
+
+for name, features in feature_sets.items():
+
+    print(f"\nRunning: {name}")
+    print(f"Number of features: {len(features)}")
+
+    x_train = train_df[features]
+    y_train = train_df["RUL"]
+
+    x_val = val_df[features]
+    y_val = val_df["RUL"]
+
+    model = RandomForestRegressor(
+        n_estimators=100,
+        random_state=42,
+        n_jobs=-1
+    )
+
+    model.fit(x_train, y_train)
+
+    predictions = model.predict(x_val)
+
+    mae = mean_absolute_error(
+        y_val,
+        predictions
+    )
+
+    rmse = np.sqrt(
+        mean_squared_error(
+            y_val,
+            predictions
+        )
+    )
+
+    ablation_results.append({
+        "Feature set": name,
+        "Features": len(features),
+        "MAE": mae,
+        "RMSE": rmse
+    })
+
+
+ablation_results = pd.DataFrame(ablation_results)
+
+print("\nFeature Ablation Results:")
+print(ablation_results)
+
 print(train_df.shape)
 print(val_df.shape)
 
 
 
 
-temporal_features = sensor_cols + lag_features + rolling_features + degradation_features
-#print("Number of temporal features:", len(temporal_features))
+# temporal_features = sensor_cols + lag_features + rolling_features + degradation_features
+# #print("Number of temporal features:", len(temporal_features))
 
-x_train_t = train_df[temporal_features]
-y_train_t = train_df["RUL"]
+# x_train_t = train_df[temporal_features]
+# y_train_t = train_df["RUL"]
 
-x_val_t = val_df[temporal_features]
-y_val_t = val_df["RUL"]
+# x_val_t = val_df[temporal_features]
+# y_val_t = val_df["RUL"]
 
-#print(x_train_t.shape)
-#print(x_val_t.shape)
+# #print(x_train_t.shape)
+# #print(x_val_t.shape)
 
-model_temporal = RandomForestRegressor(n_estimators= 100,random_state = 42, n_jobs = -1)
-model_temporal.fit(x_train_t,y_train_t)
+# model_temporal = RandomForestRegressor(n_estimators= 100,random_state = 42, n_jobs = -1)
+# model_temporal.fit(x_train_t,y_train_t)
 
-y_pred_t = model_temporal.predict(x_val_t)
+# y_pred_t = model_temporal.predict(x_val_t)
 
-mae_temporal = mean_absolute_error(
-    y_val_t,
-    y_pred_t
-)
+# mae_temporal = mean_absolute_error(
+#     y_val_t,
+#     y_pred_t
+# )
 
-rmse_temporal = np.sqrt(
-    mean_squared_error(
-        y_val_t,
-        y_pred_t
-    )
-)
+# rmse_temporal = np.sqrt(
+#     mean_squared_error(
+#         y_val_t,
+#         y_pred_t
+#     )
+# )
 
-print("Temporal + Rolling Features")
-print("MAE:", mae_temporal)
-print("RMSE:", rmse_temporal)
+# print("Temporal + Rolling Features")
+# print("MAE:", mae_temporal)
+# print("RMSE:", rmse_temporal)
 
-feature_importance = pd.DataFrame({
-    "feature":temporal_features,"importance":model_temporal.feature_importances_
-})
+# feature_importance = pd.DataFrame({
+#     "feature":temporal_features,"importance":model_temporal.feature_importances_
+# })
 
-feature_importance = feature_importance.sort_values("importance",ascending = False)
+# feature_importance = feature_importance.sort_values("importance",ascending = False)
 
-# top_features = feature_importance.head(20)
-# plt.figure()
+# # top_features = feature_importance.head(20)
+# # plt.figure()
 
-# plt.barh(top_features["feature"][::-1],top_features["importance"][::-1])
+# # plt.barh(top_features["feature"][::-1],top_features["importance"][::-1])
 
-# plt.xlabel("feature")
-# plt.ylabel("importance")
-# plt.title("top 20 random forest features")
-# plt.show()
+# # plt.xlabel("feature")
+# # plt.ylabel("importance")
+# # plt.title("top 20 random forest features")
+# # plt.show()
 
-results = pd.DataFrame({
-    "unit": val_df["unit"].values,
-    "cycle": val_df["cycle"].values,
-    "actual": y_val_t.values,
-    "predicted": y_pred_t
-})
+# results = pd.DataFrame({
+#     "unit": val_df["unit"].values,
+#     "cycle": val_df["cycle"].values,
+#     "actual": y_val_t.values,
+#     "predicted": y_pred_t
+# })
 
-results["error"] = results["actual"] - results["predicted"]
-results["abs_error"] = results["error"].abs()
+# results["error"] = results["actual"] - results["predicted"]
+# results["abs_error"] = results["error"].abs()
 
-results["RUL_region"] = pd.cut(
-    results["actual"],
-    bins=[-1, 20, 50, 100, np.inf],
-    labels=["0-20", "21-50", "51-100", "100+"]
-)
+# results["RUL_region"] = pd.cut(
+#     results["actual"],
+#     bins=[-1, 20, 50, 100, np.inf],
+#     labels=["0-20", "21-50", "51-100", "100+"]
+# )
 
-print("\nError by RUL region:")
-print(
-    results.groupby("RUL_region", observed=False)["abs_error"]
-    .agg(["mean", "count"])
-)
+# print("\nError by RUL region:")
+# print(
+#     results.groupby("RUL_region", observed=False)["abs_error"]
+#     .agg(["mean", "count"])
+# )
 
-print("\nPrediction bias by RUL region:")
-print(
-    results.groupby("RUL_region", observed=False)["error"]
-    .agg(["mean", "min", "max", "count"])
-)
+# print("\nPrediction bias by RUL region:")
+# print(
+#     results.groupby("RUL_region", observed=False)["error"]
+#     .agg(["mean", "min", "max", "count"])
+# )
 
-print("\nWorst 20 predictions:")
-print(
-    results.sort_values(
-        "abs_error",
-        ascending=False
-    ).head(20)
-)
+# print("\nWorst 20 predictions:")
+# print(
+#     results.sort_values(
+#         "abs_error",
+#         ascending=False
+#     ).head(20)
+# )
