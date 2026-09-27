@@ -100,14 +100,14 @@ Model performance is evaluated using:
 * Prediction error distribution
 * Temporal prediction behaviour
 
-Approximate experimental results:
+FINAL Model Results:
 
-| Metric |            Result |
-| ------ | ----------------: |
-| MAE    |    ~20 RUL cycles |
-| RMSE   | ~29–30 RUL cycles |
+| Metric |            Result             |
+| ------ | ----------------------------- |
+| MAE    | 11.45212339356427 RUL cycles  |
+| RMSE   | 15.319480429904301 RUL cycles |
 
-Performance varies depending on the selected feature set.
+
 
 ---
 
