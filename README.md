@@ -1,7 +1,3 @@
-Absolutely. For this project, the README should read like a **serious ML engineering project**, not a generic college-project README. It should explain the problem, dataset, methodology, feature engineering, model development, interpretation, findings, limitations, and current repository architecture.
-
-Below is a ready-to-use `README.md`.
-
 ````markdown
 # Predictive Maintenance & Remaining Useful Life Prediction
 
