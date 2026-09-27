@@ -175,15 +175,28 @@ for lag in[1,2,3]:
         train_df[f"{col}_lag{lag}"] = (train_df.groupby("unit")[col].shift(lag))
         val_df[f"{col}_lag{lag}"] = (val_df.groupby("unit")[col].shift(lag))
 
+rolling_features = []
 
-#print(train_df.shape)
-#print(val_df.shape)
+for window in [5,10]:
+    for col in sensor_cols:
+
+        feature_name = f"{col}_mean_{window}"
+
+        train_df[feature_name] = train_df.groupby("unit")[col].transform(lambda x: x.rolling(window).mean())
+        val_df[feature_name] = val_df.groupby("unit")[col].transform(lambda x: x.rolling(window).mean())
+
+        rolling_features.append(feature_name)
+
+
+
+print(train_df.shape)
+print(val_df.shape)
 
 train_df = train_df.dropna().copy()
 val_df = val_df.dropna().copy()
 
-#print(train_df.shape)
-#print(val_df.shape)
+print(train_df.shape)
+print(val_df.shape)
 
 lag_cols = []
 
@@ -191,7 +204,8 @@ for lag in [1,2,3]:
     for col in sensor_cols:
         lag_cols.append(f"{col}_lag{lag}")
 
-temporal_features = sensor_cols + lag_cols
+
+temporal_features = sensor_cols + lag_cols + rolling_features
 #print("Number of temporal features:", len(temporal_features))
 
 x_train_t = train_df[temporal_features]
@@ -220,39 +234,61 @@ rmse_temporal = np.sqrt(
     )
 )
 
-errors = y_val_t - y_pred_t
+print("Temporal + Rolling Features")
+print("MAE:", mae_temporal)
+print("RMSE:", rmse_temporal)
 
-print("Mean error:", errors.mean())
-print("Mean absolute error:", np.abs(errors).mean())
-print("Minimum error:", errors.min())
-print("Maximum error:", errors.max())
+# E"""rror by RUL region
+"""
+results = pd.DataFrame({
+    "unit": val_df["unit"].values,
+    "cycle": val_df["cycle"].values,
+    "actual": y_val_t.values,
+    "predicted": y_pred_t
+})
 
-plt.hist(errors, bins=50)
+results["error"] = results["actual"] - results["predicted"]
+results["abs_error"] = results["error"].abs()
 
-plt.xlabel("Prediction Error (Actual - Predicted)")
-plt.ylabel("Number of Predictions")
-plt.title("Temporal Random Forest - Prediction Errors")
+worst_predictions = results.sort_values(
+    "abs_error",
+    ascending=False
+).head(20)
 
-plt.tight_layout()
+print("\nWorst 20 predictions:")
+print(worst_predictions)
+
+worst_units = [1,31,84]
+
+for unit in worst_units:
+    engine = df[df["unit"] == unit]
+
+    plt.figure()
+    plt.plot(
+        engine["cycle"],engine["T30"]
+    )
+    plt.xlabel("cycle")
+    plt.ylabel("T30")
+    plt.title(f"engine{unit} cycle v t30")
+    plt.show()
+"""
+
+feature_importance = pd.DataFrame({
+    "feature":temporal_features,"importance":model_temporal.feature_importances_
+})
+
+feature_importance = feature_importance.sort_values("importance",ascending = False)
+
+print("Top 20 features")
+print(df.head(20))
+
+top_features = feature_importance.head(20)
+plt.figure()
+
+plt.barh(top_features["feature"][::-1],top_features["importance"][::-1])
+
+plt.xlabel("feature")
+plt.ylabel("importance")
+plt.title("top 20 random forest features")
 plt.show()
 
-plt.scatter(
-    y_val_t,
-    y_pred_t,
-    alpha=0.3
-)
-
-min_rul = min(y_val_t.min(), y_pred_t.min())
-max_rul = max(y_val_t.max(), y_pred_t.max())
-
-plt.plot(
-    [min_rul, max_rul],
-    [min_rul, max_rul]
-)
-
-plt.xlabel("Actual RUL")
-plt.ylabel("Predicted RUL")
-plt.title("Actual vs Predicted RUL")
-
-plt.tight_layout()
-plt.show()
